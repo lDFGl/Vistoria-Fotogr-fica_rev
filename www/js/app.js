@@ -170,11 +170,13 @@ function getLocation() {
     }
 
     setGeoText(`${state.currentLat}, ${state.currentLng}`, state.currentAddressStr);
+    if (state.previewImage) drawWatermarkedImage(state.previewImage);
   }, () => {
     state.currentLat = null;
     state.currentLng = null;
     state.currentAddressStr = 'Endereço não identificado';
     setGeoText('GPS indisponível (permissão negada ou sinal fraco)', state.currentAddressStr);
+    if (state.previewImage) drawWatermarkedImage(state.previewImage);
   }, { enableHighAccuracy: true, timeout: 8000 });
 }
 
