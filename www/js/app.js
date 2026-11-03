@@ -552,7 +552,7 @@ async function generatePDFReport() {
       alert('O PDF não conseguiu carregar o logo da FG. Verifique a publicação do arquivo logo-fg.png na raiz do GitHub Pages.');
     }
 
-    const headerTextX = logoData ? 33 : margin;
+    const headerTextX = logoData ? 46 : margin;
     doc.setTextColor(255, 255, 255);
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(14);
