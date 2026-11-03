@@ -523,13 +523,22 @@ async function generatePDFReport() {
     doc.setFillColor(19, 92, 108);
     doc.rect(0, 0, pageWidth, 28, 'F');
 
-    // Carrega o logo original do repositório e o encaixa em uma área fixa,
-    // preservando a proporção para evitar qualquer deformação.
+    // Busca o logo a partir da localização real deste módulo (www/js/app.js).
+    // O caminho é independente da URL pela qual o GitHub Pages abriu a aplicação.
     let logoData = null;
     try {
-      const logoResponse = await fetch(new URL('../logo-fg.png', document.baseURI));
-      if (!logoResponse.ok) throw new Error('Logo não encontrado');
-      logoData = await blobToBase64(await logoResponse.blob());
+      const logoUrl = new URL('../../logo-fg.png', import.meta.url);
+      const logoResponse = await fetch(logoUrl.href, { cache: 'no-store' });
+      if (!logoResponse.ok) {
+        throw new Error(`Falha ao carregar logo: HTTP ${logoResponse.status} — ${logoUrl.href}`);
+      }
+
+      const logoBlob = await logoResponse.blob();
+      if (!logoBlob.type.includes('image/png')) {
+        throw new Error(`Formato inesperado do logo: ${logoBlob.type || 'desconhecido'}`);
+      }
+
+      logoData = await blobToBase64(logoBlob);
       const logoProps = doc.getImageProperties(logoData);
       const logoBox = { x: margin, y: 4, width: 19, height: 19 };
       const logoScale = Math.min(logoBox.width / logoProps.width, logoBox.height / logoProps.height);
@@ -537,9 +546,10 @@ async function generatePDFReport() {
       const logoHeight = logoProps.height * logoScale;
       const logoX = logoBox.x + (logoBox.width - logoWidth) / 2;
       const logoY = logoBox.y + (logoBox.height - logoHeight) / 2;
-      doc.addImage(logoData, 'PNG', logoX, logoY, logoWidth, logoHeight);
+      doc.addImage(logoData, 'PNG', logoX, logoY, logoWidth, logoHeight, 'fg-logo', 'FAST');
     } catch (logoError) {
-      console.warn('Não foi possível inserir o logo no PDF:', logoError);
+      console.error('ERRO AO INSERIR LOGO NO PDF:', logoError);
+      alert('O PDF não conseguiu carregar o logo da FG. Verifique a publicação do arquivo logo-fg.png na raiz do GitHub Pages.');
     }
 
     const headerTextX = logoData ? 33 : margin;
