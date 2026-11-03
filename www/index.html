@@ -120,6 +120,20 @@
 
       <section class="bg-white rounded-xl shadow-sm p-4 border border-gray-200">
         <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3 flex items-center gap-2">
+          <i data-lucide="stamp" class="w-4 h-4 text-[#135C6C]"></i> Estilo da Marca D'água
+        </h2>
+        <label for="watermarkStyle" class="block text-xs font-medium text-gray-600 mb-1">Escolha como os dados aparecerão na fotografia</label>
+        <select id="watermarkStyle" onchange="window.handleWatermarkStyleChange && window.handleWatermarkStyleChange()" class="w-full p-2.5 bg-gray-50 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#135C6C] focus:outline-none">
+          <option value="compact">Cartão compacto — canto inferior direito (recomendado)</option>
+          <option value="minimal">Texto discreto — sem faixa de fundo</option>
+          <option value="bottom">Faixa inferior — largura total</option>
+          <option value="top">Faixa superior — largura total</option>
+        </select>
+        <p class="mt-2 text-[10px] text-gray-500">A escolha é salva neste dispositivo. Você pode alternar o estilo e conferir o resultado no preview antes de adicionar a foto.</p>
+      </section>
+
+      <section class="bg-white rounded-xl shadow-sm p-4 border border-gray-200">
+        <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3 flex items-center gap-2">
           <i data-lucide="camera" class="w-4 h-4 text-[#135C6C]"></i> Capturar / Carregar Fotografia
         </h2>
 
@@ -178,6 +192,6 @@
       </button>
     </footer>
 
-    <script type="module" src="./js/app.js?v=6"></script>
+    <script type="module" src="./js/app.js?v=7"></script>
   </body>
 </html>
