@@ -1,4 +1,3 @@
-
 name: Deploy Vistoria FG
 
 on:
@@ -29,6 +28,9 @@ jobs:
 
       - name: Configure Pages
         uses: actions/configure-pages@v5
+
+      - name: Preparar arquivos do site
+        run: cp logo-fg.png www/logo-fg.png
 
       - name: Upload site
         uses: actions/upload-pages-artifact@v4
