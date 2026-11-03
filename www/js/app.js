@@ -527,7 +527,7 @@ async function generatePDFReport() {
     // O caminho é independente da URL pela qual o GitHub Pages abriu a aplicação.
     let logoData = null;
     try {
-      const logoUrl = new URL('../../logo-fg.png', import.meta.url);
+      const logoUrl = new URL('../logo-fg.png', import.meta.url);
       const logoResponse = await fetch(logoUrl.href, { cache: 'no-store' });
       if (!logoResponse.ok) {
         throw new Error(`Falha ao carregar logo: HTTP ${logoResponse.status} — ${logoUrl.href}`);
@@ -540,7 +540,7 @@ async function generatePDFReport() {
 
       logoData = await blobToBase64(logoBlob);
       const logoProps = doc.getImageProperties(logoData);
-      const logoBox = { x: margin, y: 4, width: 19, height: 19 };
+      const logoBox = { x: margin, y: 4, width: 28, height: 19 };
       const logoScale = Math.min(logoBox.width / logoProps.width, logoBox.height / logoProps.height);
       const logoWidth = logoProps.width * logoScale;
       const logoHeight = logoProps.height * logoScale;
