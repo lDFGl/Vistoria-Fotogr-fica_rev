@@ -11,6 +11,7 @@ const state = {
   galleryUrls: [],
   pendingMeta: null,
   previewImage: null,
+  originalPhotoBlob: null,
   watermarkStyle: localStorage.getItem('vistoriaWatermarkStyle') || 'compact',
   floors: []
 };
@@ -190,6 +191,7 @@ function processImage(event) {
   image.onload = () => {
     URL.revokeObjectURL(url);
     state.previewImage = image;
+    state.originalPhotoBlob = file;
     drawWatermarkedImage(image);
   };
 
@@ -201,40 +203,25 @@ function processImage(event) {
   image.src = url;
 }
 
-function drawWatermarkedImage(image) {
-  const canvas = document.getElementById('photoCanvas');
-  if (!canvas) return;
-
+function drawWatermarkLayer(canvas, meta, style) {
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
 
-  const srcWidth = image.naturalWidth || image.width;
-  const srcHeight = image.naturalHeight || image.height;
-  const scale = Math.min(1, MAX_SIDE / Math.max(srcWidth, srcHeight));
-
-  canvas.width = Math.round(srcWidth * scale);
-  canvas.height = Math.round(srcHeight * scale);
-  ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
-
-  const building = document.getElementById('buildingName').value.trim() || 'EMPREENDIMENTO';
-  const floor = document.getElementById('floorSelect').value.trim() || 'Não informado';
-  const env = getSelectedEnvironment();
-  const now = new Date();
-  const dateStr = now.toLocaleDateString('pt-BR') + ' ' + now.toLocaleTimeString('pt-BR');
-  const locationText = state.currentAddressStr && state.currentAddressStr !== 'Endereço não identificado'
-    ? state.currentAddressStr
+  const building = String(meta.building || 'EMPREENDIMENTO').toUpperCase();
+  const floor = String(meta.floor || 'Não informado').toUpperCase();
+  const env = String(meta.env || 'Geral').toUpperCase();
+  const dateStr = meta.timestamp || new Date().toLocaleString('pt-BR');
+  const locationText = meta.location && meta.location !== 'Endereço não identificado'
+    ? meta.location
     : '';
 
-  // Exibe somente os dados solicitados; omite a localização quando indisponível.
   const lines = [
-    building.toUpperCase(),
-    `PAVIMENTO: ${floor.toUpperCase()} | AMBIENTE: ${env.toUpperCase()}`,
+    building,
+    `PAVIMENTO: ${floor} | AMBIENTE: ${env}`,
     `DATA/HORA: ${dateStr}`,
     ...(locationText ? [`LOCALIZAÇÃO: ${locationText}`] : [])
   ];
 
-  // Quatro composições inspiradas em apps de vistoria: faixa, cartão, topo e texto discreto.
-  const style = state.watermarkStyle || 'compact';
   const fontSize = Math.max(10, Math.min(24, Math.round(canvas.width / (style === 'compact' ? 58 : 48))));
   const padding = Math.max(7, fontSize * 0.7);
   const lineHeight = fontSize * 1.35;
@@ -244,7 +231,7 @@ function drawWatermarkedImage(image) {
   const fitLine = (text) => {
     let value = text;
     while (value.length > 3 && ctx.measureText(value).width > maxTextWidth) value = value.slice(0, -2);
-    if (value !== text) value = value.replace(/[\s|,;:-]+$/, '') + '…';
+    if (value !== text) value = value.replace(/[\\s|,;:-]+$/, '') + '…';
     return value;
   };
   const displayLines = lines.map(fitLine);
@@ -277,10 +264,27 @@ function drawWatermarkedImage(image) {
   });
   ctx.shadowColor = 'transparent';
   ctx.shadowBlur = 0;
+}
 
-  state.pendingMeta = {
-    floor,
-    env,
+function drawWatermarkedImage(image) {
+  const canvas = document.getElementById('photoCanvas');
+  if (!canvas) return;
+
+  const srcWidth = image.naturalWidth || image.width;
+  const srcHeight = image.naturalHeight || image.height;
+  const scale = Math.min(1, MAX_SIDE / Math.max(srcWidth, srcHeight));
+
+  canvas.width = Math.round(srcWidth * scale);
+  canvas.height = Math.round(srcHeight * scale);
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+  ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+
+  const now = new Date();
+  const meta = {
+    building: document.getElementById('buildingName').value.trim() || 'EMPREENDIMENTO',
+    floor: document.getElementById('floorSelect').value.trim() || 'Não informado',
+    env: getSelectedEnvironment(),
     location: state.currentAddressStr,
     lat: state.currentLat,
     lng: state.currentLng,
@@ -288,8 +292,47 @@ function drawWatermarkedImage(image) {
     createdAt: now.getTime()
   };
 
+  drawWatermarkLayer(canvas, meta, state.watermarkStyle || 'compact');
+  state.pendingMeta = meta;
+
   const preview = document.getElementById('previewContainer');
   if (preview) preview.classList.remove('hidden');
+}
+
+async function createWatermarkedBlob(photo) {
+  const sourceUrl = URL.createObjectURL(photo.blob);
+  try {
+    const image = await new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error('Não foi possível preparar uma fotografia para o PDF.'));
+      img.src = sourceUrl;
+    });
+
+    const width = image.naturalWidth || image.width;
+    const height = image.naturalHeight || image.height;
+    const scale = Math.min(1, MAX_SIDE / Math.max(width, height));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(width * scale);
+    canvas.height = Math.round(height * scale);
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error('Não foi possível preparar a imagem para o PDF.');
+    ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+
+    drawWatermarkLayer(canvas, {
+      building: photo.building || document.getElementById('buildingName').value.trim() || 'EMPREENDIMENTO',
+      floor: photo.floor,
+      env: photo.env,
+      location: photo.location,
+      timestamp: photo.timestamp
+    }, photo.watermarkStyle || state.watermarkStyle || 'compact');
+
+    return await new Promise((resolve, reject) => {
+      canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('Falha ao aplicar a marca-d’água para o PDF.')), 'image/jpeg', JPEG_QUALITY);
+    });
+  } finally {
+    URL.revokeObjectURL(sourceUrl);
+  }
 }
 
 function handleWatermarkStyleChange() {
@@ -320,7 +363,9 @@ async function addPhotoToInspection() {
 
   try {
     const canvas = document.getElementById('photoCanvas');
-    const blob = await canvasToBlob(canvas);
+    // O armazenamento recebe o arquivo original; o canvas com marca-d'água é apenas preview.
+    const blob = state.originalPhotoBlob;
+    if (!(blob instanceof Blob)) throw new Error('A fotografia original não está disponível. Carregue a imagem novamente.');
     const notes = document.getElementById('photoNotes').value || 'Sem inconformidades anotadas.';
 
     await savePhoto({
@@ -328,6 +373,8 @@ async function addPhotoToInspection() {
       env: state.pendingMeta.env,
       notes,
       blob,
+      building: state.pendingMeta.building,
+      watermarkStyle: state.watermarkStyle || 'compact',
       location: state.pendingMeta.location,
       lat: state.pendingMeta.lat,
       lng: state.pendingMeta.lng,
@@ -339,6 +386,8 @@ async function addPhotoToInspection() {
     renderGallery();
 
     state.pendingMeta = null;
+    state.previewImage = null;
+    state.originalPhotoBlob = null;
     const preview = document.getElementById('previewContainer');
     if (preview) preview.classList.add('hidden');
     const cameraInput = document.getElementById('cameraInput');
@@ -503,7 +552,9 @@ async function generatePDFReport() {
       doc.setFillColor(250, 252, 253);
       doc.roundedRect(x, y, cardWidth, cardHeight, 2, 2, 'FD');
 
-      const base64Img = await blobToBase64(item.blob);
+      // A marca-d'água é aplicada somente na cópia temporária usada no PDF.
+      const reportImage = await createWatermarkedBlob(item);
+      const base64Img = await blobToBase64(reportImage);
       // Mantém a proporção original da fotografia: não estica a imagem nem a marca d'água.
       const imageProps = doc.getImageProperties(base64Img);
       const imageBoxWidth = cardWidth - 4;
