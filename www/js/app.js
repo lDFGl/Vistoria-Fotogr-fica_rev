@@ -527,7 +527,7 @@ async function generatePDFReport() {
     // preservando a proporção para evitar qualquer deformação.
     let logoData = null;
     try {
-      const logoResponse = await fetch(new URL('../../logo-fg.png', import.meta.url));
+      const logoResponse = await fetch(new URL('../logo-fg.png', document.baseURI));
       if (!logoResponse.ok) throw new Error('Logo não encontrado');
       logoData = await blobToBase64(await logoResponse.blob());
       const logoProps = doc.getImageProperties(logoData);
