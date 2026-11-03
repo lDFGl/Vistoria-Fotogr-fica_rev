@@ -238,7 +238,7 @@ function drawWatermarkedImage(image) {
   const fitLine = (text) => {
     let value = text;
     while (value.length > 3 && ctx.measureText(value).width > maxTextWidth) value = value.slice(0, -2);
-    if (value !== text) value = value.replace(/[\\s|,;:-]+$/, '') + '…';
+    if (value !== text) value = value.replace(/[\s|,;:-]+$/, '') + '…';
     return value;
   };
   const displayLines = lines.map(fitLine);
