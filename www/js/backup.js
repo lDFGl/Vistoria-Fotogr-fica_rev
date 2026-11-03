@@ -1,34 +1,110 @@
-import { APP_NAME, DB_NAME, FORM_KEY, STORE } from './config.js';
 import { loadPhotos } from './storage.js';
 
-const LAST_BACKUP_KEY = 'vistoria-fg-last-backup-v1';
-const BACKUP_FORMAT = 'vistoria-fg-backup';
-const BACKUP_VERSION = 1;
-
-function readAsBase64(blob) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = String(reader.result || '');
-      const separator = result.indexOf(',');
-      if (separator < 0) {
-        reject(new Error('Não foi possível converter uma fotografia para o backup.'));
-        return;
-      }
-      resolve(result.slice(separator + 1));
-    };
-    reader.onerror = () => reject(reader.error || new Error('Falha ao ler fotografia.'));
-    reader.readAsDataURL(blob);
-  });
-}
+const LAST_BACKUP_KEY = 'vistoria-fg-last-photo-backup-v1';
 
 function safeFileName(value) {
-  const normalized = String(value || 'Empreendimento')
+  return String(value || 'Sem_identificacao')
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .replace(/[^a-zA-Z0-9_-]+/g, '_')
-    .replace(/^_+|_+$/g, '');
-  return normalized || 'Empreendimento';
+    .replace(/^_+|_+$/g, '') || 'Sem_identificacao';
+}
+
+function dosDateTime(date) {
+  const year = Math.max(1980, date.getFullYear());
+  const dosTime = (date.getHours() << 11) | (date.getMinutes() << 5) | Math.floor(date.getSeconds() / 2);
+  const dosDate = ((year - 1980) << 9) | ((date.getMonth() + 1) << 5) | date.getDate();
+  return { dosTime, dosDate };
+}
+
+const CRC_TABLE = (() => {
+  const table = new Uint32Array(256);
+  for (let n = 0; n < 256; n++) {
+    let c = n;
+    for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+    table[n] = c >>> 0;
+  }
+  return table;
+})();
+
+function crc32(bytes) {
+  let crc = 0xFFFFFFFF;
+  for (let i = 0; i < bytes.length; i++) crc = CRC_TABLE[(crc ^ bytes[i]) & 0xFF] ^ (crc >>> 8);
+  return (crc ^ 0xFFFFFFFF) >>> 0;
+}
+
+function createZip(files) {
+  const encoder = new TextEncoder();
+  const localParts = [];
+  const centralParts = [];
+  let offset = 0;
+
+  for (const file of files) {
+    const name = encoder.encode(file.name);
+    const data = file.data;
+    const crc = crc32(data);
+    const { dosTime, dosDate } = dosDateTime(file.date || new Date());
+    const local = new Uint8Array(30 + name.length);
+    const lv = new DataView(local.buffer);
+    lv.setUint32(0, 0x04034b50, true);
+    lv.setUint16(4, 20, true);
+    lv.setUint16(6, 0x0800, true);
+    lv.setUint16(8, 0, true);
+    lv.setUint16(10, dosTime, true);
+    lv.setUint16(12, dosDate, true);
+    lv.setUint32(14, crc, true);
+    lv.setUint32(18, data.length, true);
+    lv.setUint32(22, data.length, true);
+    lv.setUint16(26, name.length, true);
+    lv.setUint16(28, 0, true);
+    local.set(name, 30);
+    localParts.push(local, data);
+
+    const central = new Uint8Array(46 + name.length);
+    const cv = new DataView(central.buffer);
+    cv.setUint32(0, 0x02014b50, true);
+    cv.setUint16(4, 20, true);
+    cv.setUint16(6, 20, true);
+    cv.setUint16(8, 0x0800, true);
+    cv.setUint16(10, 0, true);
+    cv.setUint16(12, dosTime, true);
+    cv.setUint16(14, dosDate, true);
+    cv.setUint32(16, crc, true);
+    cv.setUint32(20, data.length, true);
+    cv.setUint32(24, data.length, true);
+    cv.setUint16(28, name.length, true);
+    cv.setUint16(30, 0, true);
+    cv.setUint16(32, 0, true);
+    cv.setUint16(34, 0, true);
+    cv.setUint16(36, 0, true);
+    cv.setUint32(38, 0, true);
+    cv.setUint32(42, offset, true);
+    central.set(name, 46);
+    centralParts.push(central);
+    offset += local.length + data.length;
+  }
+
+  const centralSize = centralParts.reduce((sum, part) => sum + part.length, 0);
+  const end = new Uint8Array(22);
+  const ev = new DataView(end.buffer);
+  ev.setUint32(0, 0x06054b50, true);
+  ev.setUint16(4, 0, true);
+  ev.setUint16(6, 0, true);
+  ev.setUint16(8, files.length, true);
+  ev.setUint16(10, files.length, true);
+  ev.setUint32(12, centralSize, true);
+  ev.setUint32(16, offset, true);
+  ev.setUint16(20, 0, true);
+  return new Blob([...localParts, ...centralParts, end], { type: 'application/zip' });
+}
+
+function blobToBytes(blob) {
+  return blob.arrayBuffer().then((buffer) => new Uint8Array(buffer));
+}
+
+function getPhotoDate(photo) {
+  const parsed = photo.createdAt ? new Date(photo.createdAt) : new Date();
+  return Number.isNaN(parsed.getTime()) ? new Date() : parsed;
 }
 
 export function getLastBackup() {
@@ -45,9 +121,7 @@ export function getLastBackup() {
 
 export async function requestPersistentStorage() {
   try {
-    if (!navigator.storage || typeof navigator.storage.persist !== 'function') {
-      return false;
-    }
+    if (!navigator.storage || typeof navigator.storage.persist !== 'function') return false;
     return await navigator.storage.persist();
   } catch (error) {
     console.warn('Não foi possível solicitar armazenamento persistente:', error);
@@ -57,60 +131,34 @@ export async function requestPersistentStorage() {
 
 export async function exportBackup() {
   let objectUrl;
-
   try {
     const photos = await loadPhotos();
-    const form = {};
-    const rawForm = localStorage.getItem(FORM_KEY);
-
-    if (rawForm) {
-      try {
-        Object.assign(form, JSON.parse(rawForm));
-      } catch (error) {
-        console.warn('Dados do formulário inválidos; backup seguirá sem eles.', error);
-      }
+    const validPhotos = photos.filter((photo) => photo.blob instanceof Blob);
+    if (!validPhotos.length) {
+      alert('Não há fotografias salvas para gerar o backup.');
+      return { fileName: null, photoCount: 0 };
     }
 
-    const photosWithData = await Promise.all(photos.map(async (photo) => {
-      if (!(photo.blob instanceof Blob)) {
-        throw new Error(`A fotografia ${photo.id ?? ''} não possui arquivo válido.`);
-      }
+    const files = [];
+    for (let index = 0; index < validPhotos.length; index++) {
+      const photo = validPhotos[index];
+      const date = getPhotoDate(photo);
+      const datePart = date.toISOString().slice(0, 10);
+      const floor = safeFileName(photo.floor || 'Pavimento');
+      const env = safeFileName(photo.env || 'Ambiente');
+      const sequence = String(index + 1).padStart(3, '0');
+      files.push({
+        name: `${sequence}_${floor}_${env}_${datePart}.jpg`,
+        data: await blobToBytes(photo.blob),
+        date
+      });
+    }
 
-      return {
-        id: photo.id ?? null,
-        floor: photo.floor ?? '',
-        env: photo.env ?? '',
-        notes: photo.notes ?? '',
-        location: photo.location ?? '',
-        lat: photo.lat ?? null,
-        lng: photo.lng ?? null,
-        timestamp: photo.timestamp ?? '',
-        createdAt: photo.createdAt ?? null,
-        mimeType: photo.blob.type || 'image/jpeg',
-        size: photo.blob.size,
-        dataBase64: await readAsBase64(photo.blob)
-      };
-    }));
-
-    const generatedAt = new Date().toISOString();
-    const payload = {
-      format: BACKUP_FORMAT,
-      version: BACKUP_VERSION,
-      app: APP_NAME,
-      generatedAt,
-      storage: { database: DB_NAME, store: STORE },
-      form,
-      photoCount: photosWithData.length,
-      photos: photosWithData
-    };
-
-    const json = JSON.stringify(payload);
-    const blob = new Blob([json], { type: 'application/json;charset=utf-8' });
-    objectUrl = URL.createObjectURL(blob);
-
-    const building = form.buildingName || document.getElementById('buildingName')?.value || 'Empreendimento';
-    const datePart = generatedAt.slice(0, 10);
-    const fileName = `Backup_Vistoria_${safeFileName(building)}_${datePart}.json`;
+    const generatedAt = new Date();
+    const stamp = generatedAt.toISOString().replace(/[:.]/g, '-');
+    const fileName = `Backup_Fotos_Vistoria_${stamp}.zip`;
+    const zipBlob = createZip(files);
+    objectUrl = URL.createObjectURL(zipBlob);
 
     const link = document.createElement('a');
     link.href = objectUrl;
@@ -120,26 +168,23 @@ export async function exportBackup() {
     link.click();
     link.remove();
 
-    // Registra somente após a geração completa do arquivo e o acionamento do download.
     try {
       localStorage.setItem(LAST_BACKUP_KEY, JSON.stringify({
-        at: generatedAt,
-        fileName,
-        photoCount: photosWithData.length
+        at: generatedAt.toISOString(),
+        count: files.length,
+        filename: fileName
       }));
     } catch (error) {
-      console.warn('Backup gerado, mas não foi possível registrar a data do último backup.', error);
+      console.warn('Backup gerado, mas não foi possível registrar a data:', error);
     }
 
-    alert(`Backup gerado com sucesso!\nArquivo: ${fileName}\nFotografias incluídas: ${photosWithData.length}`);
-    return { fileName, photoCount: photosWithData.length };
+    alert(`Backup das fotografias gerado com sucesso!\nArquivo: ${fileName}\nFotografias incluídas: ${files.length}\nO ZIP contém somente imagens JPG, sem arquivo JSON.`);
+    return { fileName, photoCount: files.length };
   } catch (error) {
-    console.error('Falha ao gerar backup:', error);
+    console.error('Falha ao gerar backup das fotografias:', error);
     alert(`Não foi possível gerar o backup. ${error?.message || 'Verifique o armazenamento e tente novamente.'}`);
     throw error;
   } finally {
-    if (objectUrl) {
-      setTimeout(() => URL.revokeObjectURL(objectUrl), 10000);
-    }
+    if (objectUrl) setTimeout(() => URL.revokeObjectURL(objectUrl), 30000);
   }
 }
