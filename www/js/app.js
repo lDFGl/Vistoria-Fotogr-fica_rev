@@ -214,17 +214,21 @@ function drawWatermarkedImage(image) {
   canvas.height = Math.round(srcHeight * scale);
   ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
 
-  const building = document.getElementById('buildingName').value || 'EMPREENDIMENTO';
-  const inspector = document.getElementById('inspectorName').value || 'AUDITOR TÉCNICO';
-  const floor = document.getElementById('floorSelect').value;
+  const building = document.getElementById('buildingName').value.trim() || 'EMPREENDIMENTO';
+  const floor = document.getElementById('floorSelect').value.trim() || 'Não informado';
   const env = getSelectedEnvironment();
   const now = new Date();
   const dateStr = now.toLocaleDateString('pt-BR') + ' ' + now.toLocaleTimeString('pt-BR');
+  const locationText = state.currentAddressStr && state.currentAddressStr !== 'Endereço não identificado'
+    ? state.currentAddressStr
+    : '';
 
+  // Exibe somente os dados solicitados; omite a localização quando indisponível.
   const lines = [
-    `${building.toUpperCase()} | PAV: ${floor}`,
-    `AMBIENTE: ${env.toUpperCase()} | AUDITOR: ${inspector.toUpperCase()}`,
-    `DATA: ${dateStr} | END: ${state.currentAddressStr}`
+    building.toUpperCase(),
+    `PAVIMENTO: ${floor.toUpperCase()} | AMBIENTE: ${env.toUpperCase()}`,
+    `DATA/HORA: ${dateStr}`,
+    ...(locationText ? [`LOCALIZAÇÃO: ${locationText}`] : [])
   ];
 
   // Quatro composições inspiradas em apps de vistoria: faixa, cartão, topo e texto discreto.
