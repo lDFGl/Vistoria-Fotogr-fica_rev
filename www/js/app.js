@@ -10,6 +10,8 @@ const state = {
   capturedPhotos: [],
   galleryUrls: [],
   pendingMeta: null,
+  previewImage: null,
+  watermarkStyle: localStorage.getItem('vistoriaWatermarkStyle') || 'compact',
   floors: []
 };
 
@@ -185,6 +187,7 @@ function processImage(event) {
 
   image.onload = () => {
     URL.revokeObjectURL(url);
+    state.previewImage = image;
     drawWatermarkedImage(image);
   };
 
@@ -224,32 +227,52 @@ function drawWatermarkedImage(image) {
     `DATA: ${dateStr} | END: ${state.currentAddressStr}`
   ];
 
-  let fontSize = Math.max(12, Math.floor(canvas.width / 38));
-  const fits = () => {
-    ctx.font = `bold ${fontSize}px sans-serif`;
-    return lines.every((line) => ctx.measureText(line).width <= canvas.width - fontSize * 1.6);
-  };
-
-  while (fontSize > 10 && !fits()) {
-    fontSize -= 1;
-  }
-
-  ctx.font = `bold ${fontSize}px sans-serif`;
-  const padding = fontSize * 0.8;
+  // Quatro composições inspiradas em apps de vistoria: faixa, cartão, topo e texto discreto.
+  const style = state.watermarkStyle || 'compact';
+  const fontSize = Math.max(10, Math.min(24, Math.round(canvas.width / (style === 'compact' ? 58 : 48))));
+  const padding = Math.max(7, fontSize * 0.7);
   const lineHeight = fontSize * 1.35;
-  const boxHeight = lines.length * lineHeight + padding * 1.8;
+  ctx.font = `bold ${fontSize}px sans-serif`;
 
-  ctx.fillStyle = 'rgba(15, 23, 42, 0.88)';
-  ctx.fillRect(0, canvas.height - boxHeight, canvas.width, boxHeight);
+  const maxTextWidth = style === 'compact' ? canvas.width * 0.72 - padding * 2 : canvas.width - padding * 2;
+  const fitLine = (text) => {
+    let value = text;
+    while (value.length > 3 && ctx.measureText(value).width > maxTextWidth) value = value.slice(0, -2);
+    if (value !== text) value = value.replace(/[\\s|,;:-]+$/, '') + '…';
+    return value;
+  };
+  const displayLines = lines.map(fitLine);
+  const boxHeight = displayLines.length * lineHeight + padding * 2;
+  const compactWidth = Math.min(canvas.width - padding * 2, Math.max(...displayLines.map(line => ctx.measureText(line).width)) + padding * 2);
+  const x = style === 'compact' || style === 'minimal' ? canvas.width - compactWidth - padding : 0;
+  const y = style === 'top' ? 0 : canvas.height - boxHeight - padding;
 
-  ctx.fillStyle = '#135C6C';
-  ctx.fillRect(0, canvas.height - boxHeight, canvas.width, Math.max(3, fontSize * 0.15));
+  if (style === 'compact') {
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.76)';
+    ctx.beginPath();
+    ctx.roundRect(x, y, compactWidth, boxHeight, Math.max(5, fontSize * 0.45));
+    ctx.fill();
+    ctx.fillStyle = '#2A9DAD';
+    ctx.fillRect(x, y, Math.max(3, fontSize * 0.18), boxHeight);
+  } else if (style === 'minimal') {
+    ctx.shadowColor = 'rgba(0,0,0,0.85)';
+    ctx.shadowBlur = 4;
+  } else {
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.78)';
+    ctx.fillRect(0, y, canvas.width, boxHeight + padding);
+    ctx.fillStyle = '#2A9DAD';
+    ctx.fillRect(0, style === 'top' ? y + boxHeight + padding - 3 : y, canvas.width, 3);
+  }
 
   ctx.fillStyle = '#ffffff';
   ctx.textBaseline = 'alphabetic';
-  lines.forEach((line, index) => {
-    ctx.fillText(line, padding, canvas.height - boxHeight + padding + index * lineHeight + fontSize * 0.75);
+  displayLines.forEach((line, index) => {
+    const textX = style === 'compact' ? x + padding : style === 'minimal' ? padding : padding;
+    const textY = y + padding + (index + 1) * lineHeight - fontSize * 0.2;
+    ctx.fillText(line, textX, textY);
   });
+  ctx.shadowColor = 'transparent';
+  ctx.shadowBlur = 0;
 
   state.pendingMeta = {
     floor,
@@ -263,6 +286,14 @@ function drawWatermarkedImage(image) {
 
   const preview = document.getElementById('previewContainer');
   if (preview) preview.classList.remove('hidden');
+}
+
+function handleWatermarkStyleChange() {
+  const select = document.getElementById('watermarkStyle');
+  if (!select) return;
+  state.watermarkStyle = select.value;
+  try { localStorage.setItem('vistoriaWatermarkStyle', state.watermarkStyle); } catch (error) {}
+  if (state.previewImage) drawWatermarkedImage(state.previewImage);
 }
 
 function canvasToBlob(canvas) {
@@ -516,6 +547,8 @@ async function initApp() {
   }
 
   restoreForm();
+  const watermarkSelect = document.getElementById('watermarkStyle');
+  if (watermarkSelect) watermarkSelect.value = state.watermarkStyle;
   // atualiza o card do pavimento DEPOIS de restaurar o pavimento salvo no formulário
   updateFloorInfo('floorSelect', state.floors, 'floorDetailType', 'floorDetailDates');
   bindFormPersistence();
@@ -536,6 +569,7 @@ async function initApp() {
 window.getLocation = getLocation;
 window.handleEnvironmentChange = handleEnvironmentChange;
 window.processImage = processImage;
+window.handleWatermarkStyleChange = handleWatermarkStyleChange;
 window.addPhotoToInspection = addPhotoToInspection;
 window.removePhoto = removePhoto;
 window.clearAllPhotos = clearAllPhotos;
