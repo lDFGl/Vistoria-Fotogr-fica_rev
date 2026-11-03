@@ -523,15 +523,35 @@ async function generatePDFReport() {
     doc.setFillColor(19, 92, 108);
     doc.rect(0, 0, pageWidth, 28, 'F');
 
+    // Carrega o logo original do repositório e o encaixa em uma área fixa,
+    // preservando a proporção para evitar qualquer deformação.
+    let logoData = null;
+    try {
+      const logoResponse = await fetch(new URL('../../logo-fg.png', import.meta.url));
+      if (!logoResponse.ok) throw new Error('Logo não encontrado');
+      logoData = await blobToBase64(await logoResponse.blob());
+      const logoProps = doc.getImageProperties(logoData);
+      const logoBox = { x: margin, y: 4, width: 19, height: 19 };
+      const logoScale = Math.min(logoBox.width / logoProps.width, logoBox.height / logoProps.height);
+      const logoWidth = logoProps.width * logoScale;
+      const logoHeight = logoProps.height * logoScale;
+      const logoX = logoBox.x + (logoBox.width - logoWidth) / 2;
+      const logoY = logoBox.y + (logoBox.height - logoHeight) / 2;
+      doc.addImage(logoData, 'PNG', logoX, logoY, logoWidth, logoHeight);
+    } catch (logoError) {
+      console.warn('Não foi possível inserir o logo no PDF:', logoError);
+    }
+
+    const headerTextX = logoData ? 33 : margin;
     doc.setTextColor(255, 255, 255);
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(14);
-    doc.text('RELATÓRIO & VISTORIA FOTOGRÁFICA', margin, 12);
+    doc.text('RELATÓRIO & VISTORIA FOTOGRÁFICA', headerTextX, 12);
 
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(10);
-    doc.text(`Empreendimento: ${building}`, margin, 18);
-    doc.text(`Responsável: ${inspector} (${sector})`, margin, 24);
+    doc.text(`Empreendimento: ${building}`, headerTextX, 18);
+    doc.text(`Responsável: ${inspector} (${sector})`, headerTextX, 24);
 
     for (let index = 0; index < state.capturedPhotos.length; index++) {
       const item = state.capturedPhotos[index];
