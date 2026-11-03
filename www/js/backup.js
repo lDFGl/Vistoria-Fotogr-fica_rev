@@ -102,6 +102,20 @@ function blobToBytes(blob) {
   return blob.arrayBuffer().then((buffer) => new Uint8Array(buffer));
 }
 
+function getPhotoExtension(blob) {
+  const mime = String(blob?.type || '').toLowerCase().split(';')[0].trim();
+  const extensions = {
+    'image/jpeg': 'jpg',
+    'image/jpg': 'jpg',
+    'image/png': 'png',
+    'image/webp': 'webp',
+    'image/gif': 'gif',
+    'image/bmp': 'bmp',
+    'image/avif': 'avif'
+  };
+  return extensions[mime] || 'jpg';
+}
+
 function getPhotoDate(photo) {
   const parsed = photo.createdAt ? new Date(photo.createdAt) : new Date();
   return Number.isNaN(parsed.getTime()) ? new Date() : parsed;
@@ -148,7 +162,7 @@ export async function exportBackup() {
       const env = safeFileName(photo.env || 'Ambiente');
       const sequence = String(index + 1).padStart(3, '0');
       files.push({
-        name: `${sequence}_${floor}_${env}_${datePart}.jpg`,
+        name: `${sequence}_${floor}_${env}_${datePart}.${getPhotoExtension(photo.blob)}`,
         data: await blobToBytes(photo.blob),
         date
       });
