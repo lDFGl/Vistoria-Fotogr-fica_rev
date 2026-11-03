@@ -249,9 +249,7 @@ function drawWatermarkedImage(image) {
 
   if (style === 'compact') {
     ctx.fillStyle = 'rgba(15, 23, 42, 0.76)';
-    ctx.beginPath();
-    ctx.roundRect(x, y, compactWidth, boxHeight, Math.max(5, fontSize * 0.45));
-    ctx.fill();
+    ctx.fillRect(x, y, compactWidth, boxHeight);
     ctx.fillStyle = '#2A9DAD';
     ctx.fillRect(x, y, Math.max(3, fontSize * 0.18), boxHeight);
   } else if (style === 'minimal') {
@@ -267,7 +265,7 @@ function drawWatermarkedImage(image) {
   ctx.fillStyle = '#ffffff';
   ctx.textBaseline = 'alphabetic';
   displayLines.forEach((line, index) => {
-    const textX = style === 'compact' ? x + padding : style === 'minimal' ? padding : padding;
+    const textX = style === 'compact' || style === 'minimal' ? x + padding : padding;
     const textY = y + padding + (index + 1) * lineHeight - fontSize * 0.2;
     ctx.fillText(line, textX, textY);
   });
