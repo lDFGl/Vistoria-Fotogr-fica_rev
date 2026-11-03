@@ -504,7 +504,19 @@ async function generatePDFReport() {
       doc.roundedRect(x, y, cardWidth, cardHeight, 2, 2, 'FD');
 
       const base64Img = await blobToBase64(item.blob);
-      doc.addImage(base64Img, 'JPEG', x + 2, y + 2, cardWidth - 4, 75);
+      // Mantém a proporção original da fotografia: não estica a imagem nem a marca d'água.
+      const imageProps = doc.getImageProperties(base64Img);
+      const imageBoxWidth = cardWidth - 4;
+      const imageBoxHeight = 75;
+      const imageScale = Math.min(
+        imageBoxWidth / imageProps.width,
+        imageBoxHeight / imageProps.height
+      );
+      const imageWidth = imageProps.width * imageScale;
+      const imageHeight = imageProps.height * imageScale;
+      const imageX = x + 2 + (imageBoxWidth - imageWidth) / 2;
+      const imageY = y + 2 + (imageBoxHeight - imageHeight) / 2;
+      doc.addImage(base64Img, 'JPEG', imageX, imageY, imageWidth, imageHeight);
 
       doc.setTextColor(30, 41, 59);
       doc.setFont('helvetica', 'bold');
