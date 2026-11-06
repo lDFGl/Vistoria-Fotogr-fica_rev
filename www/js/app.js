@@ -688,9 +688,8 @@ async function generatePDFReport() {
       doc.setTextColor(255, 255, 255);
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(8);
-      doc.text('FG | RELATÓRIO & VISTORIA FOTOGRÁFICA', margin, 289);
       doc.setFont('helvetica', 'bold');
-      doc.text(`Página ${page} de ${totalPages}`, pageWidth - margin, 289, { align: 'right' });
+      doc.text(`Página ${page}`, pageWidth / 2, 289, { align: 'center' });
     }
 
     doc.save(`Relatorio_Vistoria_${building.replace(/\s+/g, '_')}.pdf`);
