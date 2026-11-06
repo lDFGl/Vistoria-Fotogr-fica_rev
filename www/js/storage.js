@@ -60,3 +60,28 @@ export async function clearPhotosInDB() {
     tx.onerror = () => reject(tx.error);
   });
 }
+
+export async function updatePhotoNotes(id, notes) {
+  const db = await openDB();
+
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE, 'readwrite');
+    const store = tx.objectStore(STORE);
+    const request = store.get(id);
+
+    request.onsuccess = () => {
+      const photo = request.result;
+      if (!photo) {
+        reject(new Error('Fotografia não encontrada no armazenamento local.'));
+        return;
+      }
+      photo.notes = notes;
+      store.put(photo);
+    };
+
+    request.onerror = () => reject(request.error);
+    tx.oncomplete = resolve;
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error || new Error('Atualização cancelada.'));
+  });
+}
