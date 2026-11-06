@@ -565,8 +565,6 @@ async function generatePDFReport() {
     const pageWidth = 210;
     const margin = 10;
     const cardWidth = (pageWidth - margin * 2 - 6) / 2;
-    const cardHeight = 118;
-
     const itemsPerPage = 4;
     let col = 0;
     let row = 0;
@@ -656,6 +654,43 @@ async function generatePDFReport() {
         col = 0;
         row += 1;
       }
+    }
+
+    // Cabeçalho e rodapé institucionais em todas as páginas.
+    const totalPages = doc.getNumberOfPages();
+    for (let page = 1; page <= totalPages; page++) {
+      doc.setPage(page);
+      doc.setFillColor(19, 92, 108);
+      doc.rect(0, 0, pageWidth, 28, 'F');
+
+      if (logoData) {
+        const logoProps = doc.getImageProperties(logoData);
+        const logoBox = { x: margin, y: 4, width: 28, height: 19 };
+        const logoScale = Math.min(logoBox.width / logoProps.width, logoBox.height / logoProps.height);
+        const logoWidth = logoProps.width * logoScale;
+        const logoHeight = logoProps.height * logoScale;
+        const logoX = logoBox.x + (logoBox.width - logoWidth) / 2;
+        const logoY = logoBox.y + (logoBox.height - logoHeight) / 2;
+        doc.addImage(logoData, 'PNG', logoX, logoY, logoWidth, logoHeight, 'fg-logo', 'FAST');
+      }
+
+      doc.setTextColor(255, 255, 255);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(13);
+      doc.text('RELATÓRIO & VISTORIA FOTOGRÁFICA', headerTextX, 11);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(9);
+      doc.text(`Empreendimento: ${building}`, headerTextX, 17);
+      doc.text(`Responsável: ${inspector} (${sector})`, headerTextX, 23);
+
+      doc.setFillColor(19, 92, 108);
+      doc.rect(0, footerY, pageWidth, pageHeight - footerY, 'F');
+      doc.setTextColor(255, 255, 255);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8);
+      doc.text('FG | RELATÓRIO & VISTORIA FOTOGRÁFICA', margin, 289);
+      doc.setFont('helvetica', 'bold');
+      doc.text(`Página ${page} de ${totalPages}`, pageWidth - margin, 289, { align: 'right' });
     }
 
     doc.save(`Relatorio_Vistoria_${building.replace(/\s+/g, '_')}.pdf`);
