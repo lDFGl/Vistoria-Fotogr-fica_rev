@@ -1,6 +1,6 @@
 import { MAX_SIDE, JPEG_QUALITY, FORM_KEY } from './config.js';
 import { loadFloors, populateFloors, updateFloorInfo } from './floors.js';
-import { savePhoto, loadPhotos, deletePhotoFromDB, clearPhotosInDB } from './storage.js';
+import { savePhoto, loadPhotos, updatePhotoNotes, deletePhotoFromDB, clearPhotosInDB } from './storage.js';
 import { exportBackup, requestPersistentStorage, getLastBackup } from './backup.js';
 
 const state = {
@@ -427,12 +427,22 @@ function renderGallery() {
     return `
       <div class="relative rounded-lg overflow-hidden border border-gray-200 bg-gray-50 shadow-sm flex flex-col">
         <img src="${url}" class="w-full h-32 object-cover" alt="Foto da vistoria" />
-        <div class="p-2 text-[10px] space-y-1">
+        <div class="p-2 text-[10px] space-y-2">
           <p class="font-bold text-slate-800">${escapeHtml(item.floor)}</p>
           <p class="text-[#135C6C] font-semibold truncate">Ambiente: ${escapeHtml(item.env)}</p>
-          <p class="text-gray-500 line-clamp-2">${escapeHtml(item.notes)}</p>
+          <p id="photoNoteText-${item.id}" class="text-gray-600 whitespace-pre-wrap break-words">${escapeHtml(item.notes || 'Sem inconformidades anotadas.')}</p>
+          <div id="photoNoteEditor-${item.id}" class="hidden space-y-2">
+            <textarea id="photoNoteInput-${item.id}" rows="3" class="w-full p-2 bg-white border border-gray-300 rounded-lg text-[10px] focus:ring-2 focus:ring-[#135C6C] focus:outline-none" aria-label="Editar observação da foto">${escapeHtml(item.notes || '')}</textarea>
+            <div class="flex gap-2">
+              <button type="button" onclick="window.savePhotoNotes && window.savePhotoNotes(${item.id})" class="flex-1 py-2 bg-[#135C6C] text-white rounded-lg font-semibold">Salvar</button>
+              <button type="button" onclick="window.cancelPhotoNotes && window.cancelPhotoNotes(${item.id})" class="flex-1 py-2 bg-gray-200 text-gray-700 rounded-lg font-semibold">Cancelar</button>
+            </div>
+          </div>
+          <button id="photoNoteEditBtn-${item.id}" type="button" onclick="window.editPhotoNotes && window.editPhotoNotes(${item.id})" class="w-full py-2 border border-[#135C6C] text-[#135C6C] rounded-lg font-semibold flex items-center justify-center gap-1">
+            <i data-lucide="pencil" class="w-3 h-3"></i> Editar comentário
+          </button>
         </div>
-        <button type="button" onclick="window.removePhoto && window.removePhoto(${item.id})" class="absolute top-1 right-1 bg-red-600 text-white rounded-full p-1 shadow hover:bg-red-700">
+        <button type="button" onclick="window.removePhoto && window.removePhoto(${item.id})" class="absolute top-1 right-1 bg-red-600 text-white rounded-full p-1 shadow hover:bg-red-700" aria-label="Remover foto">
           <i data-lucide="x" class="w-3 h-3"></i>
         </button>
       </div>
@@ -441,6 +451,48 @@ function renderGallery() {
 
   if (window.lucide && typeof window.lucide.createIcons === 'function') {
     window.lucide.createIcons();
+  }
+}
+
+function editPhotoNotes(id) {
+  const editor = document.getElementById(`photoNoteEditor-${id}`);
+  const editButton = document.getElementById(`photoNoteEditBtn-${id}`);
+  const input = document.getElementById(`photoNoteInput-${id}`);
+  if (!editor || !input) return;
+  editor.classList.remove('hidden');
+  if (editButton) editButton.classList.add('hidden');
+  input.focus();
+}
+
+function cancelPhotoNotes(id) {
+  const photo = state.capturedPhotos.find((item) => item.id === id);
+  const editor = document.getElementById(`photoNoteEditor-${id}`);
+  const editButton = document.getElementById(`photoNoteEditBtn-${id}`);
+  const input = document.getElementById(`photoNoteInput-${id}`);
+  if (!editor || !input) return;
+  input.value = photo?.notes || '';
+  editor.classList.add('hidden');
+  if (editButton) editButton.classList.remove('hidden');
+}
+
+async function savePhotoNotes(id) {
+  const input = document.getElementById(`photoNoteInput-${id}`);
+  if (!input) return;
+  const photo = state.capturedPhotos.find((item) => item.id === id);
+  if (!photo) return;
+
+  const saveButton = document.querySelector(`#photoNoteEditor-${id} button`);
+  if (saveButton) saveButton.disabled = true;
+
+  try {
+    const notes = input.value.trim() || 'Sem inconformidades anotadas.';
+    await updatePhotoNotes(id, notes);
+    photo.notes = notes;
+    renderGallery();
+  } catch (error) {
+    console.error('Não foi possível atualizar o comentário:', error);
+    alert('Não foi possível salvar o comentário. Tente novamente.');
+    if (saveButton) saveButton.disabled = false;
   }
 }
 
@@ -669,6 +721,9 @@ window.processImage = processImage;
 window.handleWatermarkStyleChange = handleWatermarkStyleChange;
 window.addPhotoToInspection = addPhotoToInspection;
 window.removePhoto = removePhoto;
+window.editPhotoNotes = editPhotoNotes;
+window.savePhotoNotes = savePhotoNotes;
+window.cancelPhotoNotes = cancelPhotoNotes;
 window.clearAllPhotos = clearAllPhotos;
 window.exportBackup = exportBackup;
 window.generatePDFReport = generatePDFReport;
