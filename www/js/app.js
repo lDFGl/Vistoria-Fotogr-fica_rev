@@ -567,16 +567,19 @@ async function generatePDFReport() {
     const cardWidth = (pageWidth - margin * 2 - 6) / 2;
     const cardHeight = 118;
 
-    let itemsPerPage = 4;
+    const itemsPerPage = 4;
     let col = 0;
     let row = 0;
-    let startY = 42;
-
-    doc.setFillColor(19, 92, 108);
-    doc.rect(0, 0, pageWidth, 28, 'F');
+    // Reserva espaço fixo para cabeçalho e rodapé em TODAS as páginas.
+    const contentStartY = 36;
+    let startY = contentStartY;
+    const footerY = 282;
+    const cardHeight = 112;
+    const rowGap = 6;
+    const rowStep = cardHeight + rowGap;
+    const pageHeight = 297;
 
     // Busca o logo a partir da localização real deste módulo (www/js/app.js).
-    // O caminho é independente da URL pela qual o GitHub Pages abriu a aplicação.
     let logoData = null;
     try {
       const logoUrl = new URL('../logo-fg.png', import.meta.url);
@@ -589,31 +592,13 @@ async function generatePDFReport() {
       if (!logoBlob.type.includes('image/png')) {
         throw new Error(`Formato inesperado do logo: ${logoBlob.type || 'desconhecido'}`);
       }
-
       logoData = await blobToBase64(logoBlob);
-      const logoProps = doc.getImageProperties(logoData);
-      const logoBox = { x: margin, y: 4, width: 28, height: 19 };
-      const logoScale = Math.min(logoBox.width / logoProps.width, logoBox.height / logoProps.height);
-      const logoWidth = logoProps.width * logoScale;
-      const logoHeight = logoProps.height * logoScale;
-      const logoX = logoBox.x + (logoBox.width - logoWidth) / 2;
-      const logoY = logoBox.y + (logoBox.height - logoHeight) / 2;
-      doc.addImage(logoData, 'PNG', logoX, logoY, logoWidth, logoHeight, 'fg-logo', 'FAST');
     } catch (logoError) {
-      console.error('ERRO AO INSERIR LOGO NO PDF:', logoError);
-      alert('O PDF não conseguiu carregar o logo da FG. Verifique a publicação do arquivo logo-fg.png na raiz do GitHub Pages.');
+      console.error('ERRO AO CARREGAR LOGO NO PDF:', logoError);
+      alert('O PDF não conseguiu carregar o logo da FG. Verifique a publicação do arquivo logo-fg.png.');
     }
 
     const headerTextX = logoData ? 46 : margin;
-    doc.setTextColor(255, 255, 255);
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(14);
-    doc.text('RELATÓRIO & VISTORIA FOTOGRÁFICA', headerTextX, 12);
-
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(10);
-    doc.text(`Empreendimento: ${building}`, headerTextX, 18);
-    doc.text(`Responsável: ${inspector} (${sector})`, headerTextX, 24);
 
     for (let index = 0; index < state.capturedPhotos.length; index++) {
       const item = state.capturedPhotos[index];
@@ -622,13 +607,13 @@ async function generatePDFReport() {
         doc.addPage();
         col = 0;
         row = 0;
-        startY = 15;
+        startY = contentStartY;
       }
 
       setBusyProgress(`Processando foto ${index + 1} de ${state.capturedPhotos.length}...`);
 
       const x = margin + col * (cardWidth + 6);
-      const y = startY + row * (cardHeight + 6);
+      const y = startY + row * rowStep;
 
       doc.setDrawColor(220, 226, 230);
       doc.setFillColor(250, 252, 253);
@@ -640,7 +625,7 @@ async function generatePDFReport() {
       // Mantém a proporção original da fotografia: não estica a imagem nem a marca d'água.
       const imageProps = doc.getImageProperties(base64Img);
       const imageBoxWidth = cardWidth - 4;
-      const imageBoxHeight = 75;
+      const imageBoxHeight = 65;
       const imageScale = Math.min(
         imageBoxWidth / imageProps.width,
         imageBoxHeight / imageProps.height
